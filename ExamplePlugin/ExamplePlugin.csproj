@@ -1,0 +1,102 @@
+<!--
+    Universal Zumbi Blocks 2 Plugin Configuration
+
+    Includes:
+    - support for custom install location
+    - automatic plugin installation
+    - defaults for Steam and itch app
+    - validation of game installation
+    - validation of BepInEx installation
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- Change these values with your own -->
+    <AssemblyName>ExamplePlugin</AssemblyName>
+    <RootNamespace>ExamplePlugin</RootNamespace>
+    <AssemblyVersion>0.1.0</AssemblyVersion>
+    <!-- Know what you're doing and need more customization? Here you go! -->
+    <LangVersion>10</LangVersion>
+    <TargetFramework>net6.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!-- Base references for all target frameworks -->
+  <ItemGroup>
+    <PackageReference Include="BepInEx.Core" Version="5.*" />
+    <PackageReference Include="UnityEngine.Modules" Version="2020.3.17" IncludeAssets="compile" />
+  </ItemGroup>
+  
+  <!-- Additional references for the .NET Framework -->
+  <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.2" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!-- Retrieve any itch app installation directories -->
+  <ItemGroup>
+    <ItchGameExecutables
+        Condition="Exists('$(APPDATA)\itch\apps\zumbi-blocks-2')"
+        Include="$(APPDATA)\itch\apps\zumbi-blocks-2\Zumbi Blocks 2*\ZumbiBlocks2.exe"
+    >
+      <AbsoluteDirectoryPath>%(RootDir)%(Directory)</AbsoluteDirectoryPath>
+    </ItchGameExecutables>
+  </ItemGroup>
+  
+  <!-- Automatic Fallback Values -->
+  <PropertyGroup>
+    <!-- Default Steam install location -->
+    <DefaultSteamDir>C:\Program Files (x86)\Steam\steamapps\common\Zumbi Blocks 2 Open Alpha</DefaultSteamDir>
+    <!-- Default itch app install location -->
+    <DefaultItchDir>@(ItchGameExecutables->Reverse()->'%(AbsoluteDirectoryPath)')</DefaultItchDir>
+  </PropertyGroup>
+  
+  <!-- Verify game directory exists with complete BepInEx installation -->
+  <Target Name="ValidateModLoaderInstallation" BeforeTargets="Build">
+    <!--
+        If no custom install location has been set, fallback to default Steam and itch app install locations.
+        Steam will take higher priority over the itch app, so if you're targetting the itch.io version of the game,
+        use the custom install location property in *.csproj.user, as it holds highest priority.
+        
+        NOTE: It seems the itch app's install location cannot be retrieved before build event,
+        so I've moved the PropertyGroup here, inside the target.
+        I have spent way too many hours trying to figure this out..
+    -->
+    <PropertyGroup>
+      <ZumbiBlocks2_Location
+          Condition="('$(ZumbiBlocks2_Location)' == '' Or !Exists('$(ZumbiBlocks2_Location)')) And Exists('$(DefaultSteamDir)')"
+      >$(DefaultSteamDir)</ZumbiBlocks2_Location>
+      <ZumbiBlocks2_Location
+          Condition="('$(ZumbiBlocks2_Location)' == '' Or !Exists('$(ZumbiBlocks2_Location)')) And Exists('$(DefaultItchDir)')"
+      >$(DefaultItchDir)</ZumbiBlocks2_Location>
+    </PropertyGroup>
+    
+    <!-- If the ZumbiBlocks2_Location property has not been set, throw an error -->
+    <Error
+        Condition="'$(ZumbiBlocks2_Location)' == ''"
+        Text="Please specify your Zumbi Blocks 2 installation directory."
+    />
+    <!-- If the ZumbiBlocks2_Location directory does not exist, throw an error -->
+    <Error
+        Condition="!Exists('$(ZumbiBlocks2_Location)')"
+        Text="Could not locate Zumbi Blocks 2 installation directory. Please check your ZumbiBlocks2_Location property and try again."
+    />
+    <!-- If the BepInEx directory is missing, throw an error -->
+    <Error
+        Condition="!Exists('$(ZumbiBlocks2_Location)\BepInEx')"
+        Text="Could not locate BepInEx installation. Please download BepInEx from its repository: https://github.com/BepInEx/BepInEx/releases"
+    />
+    <!-- If the BepInEx core assembly is missing, throw an error -->
+    <Error
+        Condition="!Exists('$(ZumbiBlocks2_Location)\BepInEx\core\BepInEx.dll')"
+        Text="BepInEx installation is corrupted. Please re-download BepInEx from its repository: https://github.com/BepInEx/BepInEx/releases"
+    />
+  </Target>
+
+  <!-- Automatically deploy to the plugins directory after building assembly -->
+  <Target Name="DeployToPluginsDirectory" AfterTargets="Build">
+    <!-- Copy newly-built assembly to BepInEx plugins directory -->
+    <Copy
+        SourceFiles="$(TargetDir)$(AssemblyName).dll"
+        DestinationFolder="$(ZumbiBlocks2_Location)\BepInEx\plugins\$(AssemblyName)"
+    />
+  </Target>
+</Project>
